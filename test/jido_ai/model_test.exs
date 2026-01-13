@@ -15,7 +15,7 @@ defmodule JidoTest.AI.ModelTest do
                )
 
       # ReqLLM.Model has different fields
-      assert %ReqLLM.Model{} = model
+      assert %LLMDB.Model{} = model
       assert model.provider == :anthropic
       assert model.model == "claude-3-5-haiku"
     end
@@ -31,7 +31,7 @@ defmodule JidoTest.AI.ModelTest do
                )
 
       # ReqLLM.Model has different fields
-      assert %ReqLLM.Model{} = model
+      assert %LLMDB.Model{} = model
       assert model.provider == :anthropic
       assert model.model == "claude-3-5-haiku"
       assert model.capabilities == [:chat]
@@ -42,7 +42,7 @@ defmodule JidoTest.AI.ModelTest do
                Model.validate_model_opts({:anthropic, [model: "claude-3-5-haiku"]})
 
       # ReqLLM.Model has different fields
-      assert %ReqLLM.Model{} = model
+      assert %LLMDB.Model{} = model
       assert model.provider == :anthropic
       assert model.model == "claude-3-5-haiku"
     end

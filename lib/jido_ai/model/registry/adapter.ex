@@ -18,7 +18,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
 
   @type provider_id :: atom()
   @type model_name :: String.t()
-  @type reqllm_model :: ReqLLM.Model.t()
+  @type reqllm_model :: LLMDB.Model.t()
 
   @doc """
   Lists all available providers from ReqLLM registry.
@@ -60,13 +60,13 @@ defmodule Jido.AI.Model.Registry.Adapter do
     - provider_id: Provider atom (:anthropic, :openai, etc.)
 
   ## Returns
-    - `{:ok, models}` - list of ReqLLM.Model structs
+    - `{:ok, models}` - list of LLMDB.Model structs
     - `{:error, reason}` - provider not found or registry unavailable
 
   ## Examples
 
       {:ok, models} = list_models(:anthropic)
-      models # => [%ReqLLM.Model{provider: :anthropic, model: "claude-3-5-sonnet", ...}, ...]
+      models # => [%LLMDB.Model{provider: :anthropic, model: "claude-3-5-sonnet", ...}, ...]
       length(models) # => 15+
 
   """
@@ -76,7 +76,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
       {:module, _module} ->
         case ReqLLM.Provider.Registry.list_models(provider_id) do
           {:ok, model_names} when is_list(model_names) ->
-            # Convert model names to ReqLLM.Model structs
+            # Convert model names to LLMDB.Model structs
             models =
               model_names
               |> Enum.map(fn model_name ->
@@ -86,7 +86,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
 
                   {:error, _} ->
                     # Create minimal model struct if metadata unavailable
-                    ReqLLM.Model.new(provider_id, model_name)
+                    LLMDB.Model.new!(%{id: model_name, provider: provider_id})
                 end
               end)
               |> Enum.reject(&is_nil/1)
@@ -106,7 +106,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
             # Direct list of model names (legacy format)
             models =
               Enum.map(model_names, fn model_name ->
-                ReqLLM.Model.new(provider_id, model_name)
+                LLMDB.Model.new!(%{id: model_name, provider: provider_id})
               end)
 
             Logger.debug(
@@ -144,7 +144,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
     - model_name: String model identifier ("claude-3-5-sonnet", etc.)
 
   ## Returns
-    - `{:ok, model}` - enhanced ReqLLM.Model struct
+    - `{:ok, model}` - enhanced LLMDB.Model struct
     - `{:error, reason}` - model not found or registry unavailable
 
   ## Examples
@@ -291,11 +291,11 @@ defmodule Jido.AI.Model.Registry.Adapter do
 
   defp get_model_struct(provider_id, model_name) do
     case ReqLLM.Provider.Registry.get_model(provider_id, model_name) do
-      {:ok, model} when is_struct(model, ReqLLM.Model) ->
+      {:ok, model} when is_struct(model, LLMDB.Model) ->
         {:ok, model}
 
       {:ok, model_info} when is_map(model_info) ->
-        # Convert model info map to ReqLLM.Model struct
+        # Convert model info map to LLMDB.Model struct
         model = create_model_from_info(provider_id, model_name, model_info)
         {:ok, model}
 
@@ -306,7 +306,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
         Logger.warning("Unexpected model format from registry: #{inspect(other)}")
 
         # Create minimal model as fallback
-        model = ReqLLM.Model.new(provider_id, model_name)
+        model = LLMDB.Model.new!(%{id: model_name, provider: provider_id})
         {:ok, model}
     end
   rescue
@@ -320,7 +320,7 @@ defmodule Jido.AI.Model.Registry.Adapter do
 
   defp create_model_from_info(provider_id, model_name, model_info) do
     # Extract relevant fields from model info map
-    base_model = ReqLLM.Model.new(provider_id, model_name)
+    base_model = LLMDB.Model.new!(%{id: model_name, provider: provider_id})
 
     # Enhance with available metadata
     enhanced_model =

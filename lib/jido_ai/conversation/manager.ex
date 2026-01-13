@@ -77,7 +77,7 @@ defmodule Jido.AI.Conversation.Manager do
       {:ok, conv_id} = Manager.create(model)
       {:ok, conv_id} = Manager.create(model, system_prompt: "You are helpful.")
   """
-  @spec create(ReqLLM.Model.t() | map(), keyword()) :: {:ok, String.t()} | {:error, term()}
+  @spec create(LLMDB.Model.t() | map(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def create(model, opts \\ []) do
     GenServer.call(__MODULE__, {:create, model, opts})
   end

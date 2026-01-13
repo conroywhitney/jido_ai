@@ -288,9 +288,9 @@ defmodule JidoTest.AI.BackwardCompatibilityTest do
     end
 
     test "unknown provider in tuple creates model" do
-      # ReqLLM accepts any provider atom, doesn't validate provider names
+      # LLMDB accepts any provider atom, doesn't validate provider names
       result = Model.from({:unknown_provider, [model: "test"]})
-      assert match?({:ok, %ReqLLM.Model{provider: :unknown_provider}}, result)
+      assert match?({:ok, %LLMDB.Model{provider: :unknown_provider}}, result)
     end
   end
 

@@ -103,14 +103,16 @@ defmodule JidoTest.ReqLLMTestHelper do
   def create_test_model(provider, opts \\ []) do
     model_name = Keyword.get(opts, :model, "test-model")
 
-    %ReqLLM.Model{
+    # Use LLMDB.Model directly since ReqLLM.Model is now an alias/shim
+    LLMDB.Model.new!(%{
+      id: model_name,
       provider: provider,
       model: model_name,
-      max_tokens: Keyword.get(opts, :max_tokens, 1024),
-      capabilities: Keyword.get(opts, :capabilities, %{tool_call: true, reasoning: false}),
+      limits: %{output: Keyword.get(opts, :max_tokens, 1024)},
+      capabilities: Keyword.get(opts, :capabilities, %{tools: %{enabled: true}, reasoning: %{enabled: false}}),
       modalities: Keyword.get(opts, :modalities, %{input: [:text], output: [:text]}),
       cost: Keyword.get(opts, :cost, %{input: 1.0, output: 2.0})
-    }
+    })
   end
 
   @doc """
@@ -124,9 +126,10 @@ defmodule JidoTest.ReqLLMTestHelper do
       assert_reqllm_model(result)
   """
   def assert_reqllm_model(model) do
-    assert is_struct(model, ReqLLM.Model), "Expected ReqLLM.Model, got: #{inspect(model)}"
+    # LLMDB.Model is now used instead of ReqLLM.Model
+    assert is_struct(model, LLMDB.Model), "Expected LLMDB.Model, got: #{inspect(model)}"
     assert model.provider != nil, "Model provider is nil"
-    assert model.model != nil, "Model name is nil"
+    assert model.id != nil, "Model id is nil"
     model
   end
 

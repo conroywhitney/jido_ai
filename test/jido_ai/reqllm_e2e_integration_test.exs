@@ -110,12 +110,13 @@ defmodule JidoTest.AI.ReqLLME2EIntegrationTest do
 
       mock_generate_text(mock_chat_response("Passthrough response"))
 
-      # Create ReqLLM.Model directly
-      reqllm_model = %ReqLLM.Model{
+      # Create LLMDB.Model directly
+      reqllm_model = LLMDB.Model.new!(%{
+        id: "gpt-4",
         provider: :openai,
         model: "gpt-4",
-        max_tokens: 1024
-      }
+        limits: %{output: 1024}
+      })
 
       {:ok, result} = ChatCompletion.run(%{model: reqllm_model, prompt: prompt}, %{})
 

@@ -74,14 +74,14 @@ defmodule Jido.AI.Model do
       iex> Jido.AI.Model.from(%Jido.AI.Model{provider: :openai, model: "gpt-4"})
       {:ok, %Jido.AI.Model{provider: :openai, model: "gpt-4", ...}}
   """
-  @spec from(term()) :: {:ok, ReqLLM.Model.t()} | {:error, String.t()}
+  @spec from(term()) :: {:ok, LLMDB.Model.t()} | {:error, String.t()}
   def from(input) do
     case input do
-      # Already a ReqLLM.Model struct
-      %ReqLLM.Model{} = model ->
+      # Already an LLMDB.Model struct
+      %LLMDB.Model{} = model ->
         {:ok, model}
 
-      # Already a Jido.AI.Model struct - convert to ReqLLM.Model
+      # Already a Jido.AI.Model struct - convert to LLMDB.Model
       %__MODULE__{provider: provider, model: model_name} ->
         ReqLLM.Model.from("#{provider}:#{model_name}")
 
@@ -90,7 +90,7 @@ defmodule Jido.AI.Model do
         model_name = Keyword.get(opts, :model)
 
         if model_name do
-          # Use ReqLLM.Model directly
+          # Use LLMDB.Model directly
           ReqLLM.Model.from({provider, model_name, opts})
         else
           {:error, "model option is required for provider #{provider}"}

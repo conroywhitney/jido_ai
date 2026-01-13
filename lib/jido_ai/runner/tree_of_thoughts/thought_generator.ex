@@ -295,17 +295,17 @@ defmodule Jido.AI.Runner.TreeOfThoughts.ThoughtGenerator do
     end
   end
 
-  # Build a Jido.AI.Model from a model string
+  # Build an LLMDB.Model from a model string
   defp build_model(model_str) when is_binary(model_str) do
     case String.split(model_str, ":", parts: 2) do
       [provider_str, model_name] ->
         provider = String.to_atom(provider_str)
-        # Create ReqLLM.Model directly
+        # Create LLMDB.Model directly
         {:ok, model} = ReqLLM.Model.from("#{provider}:#{model_name}")
         model
 
       [model_name] ->
-        # Create ReqLLM.Model directly with default provider
+        # Create LLMDB.Model directly with default provider
         {:ok, model} = ReqLLM.Model.from("openai:#{model_name}")
         model
     end

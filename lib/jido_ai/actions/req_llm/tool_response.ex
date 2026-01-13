@@ -66,7 +66,15 @@ defmodule Jido.AI.Actions.ReqLlm.ToolResponse do
       ],
       temperature: [type: :float, default: 0.7, doc: "Temperature for response randomness"],
       timeout: [type: :integer, default: 30_000, doc: "Timeout in milliseconds"],
-      verbose: [type: :boolean, default: false, doc: "Verbose output"]
+      verbose: [type: :boolean, default: false, doc: "Verbose output"],
+      reasoning_effort: [
+        type: {:in, [:low, :medium, :high]},
+        doc: "Enable extended thinking with effort level (:low=1K, :medium=2K, :high=4K tokens)"
+      ],
+      thinking: [
+        type: :map,
+        doc: "Direct thinking config (e.g., %{type: \"enabled\", budget_tokens: 4096})"
+      ]
     ]
 
   alias Jido.AI.Actions.ReqLlm.ChatCompletion
@@ -125,14 +133,18 @@ defmodule Jido.AI.Actions.ReqLlm.ToolResponse do
 
   defp execute_with_prompt(model, prompt, tools, params, context) do
     # Prepare the parameters for ChatCompletion
-    completion_params = %{
-      model: model,
-      prompt: prompt,
-      tools: tools,
-      temperature: params[:temperature] || 0.7,
-      timeout: params[:timeout] || 30_000,
-      verbose: params[:verbose] || false
-    }
+    completion_params =
+      %{
+        model: model,
+        prompt: prompt,
+        tools: tools,
+        temperature: params[:temperature] || 0.7,
+        timeout: params[:timeout] || 30_000,
+        verbose: params[:verbose] || false
+      }
+      # Pass through thinking options if provided
+      |> maybe_put(:reasoning_effort, params[:reasoning_effort])
+      |> maybe_put(:thinking, params[:thinking])
 
     case ChatCompletion.run(completion_params, context) do
       {:ok, %{content: content, tool_results: tool_results}} ->
@@ -147,4 +159,7 @@ defmodule Jido.AI.Actions.ReqLlm.ToolResponse do
         {:error, reason}
     end
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

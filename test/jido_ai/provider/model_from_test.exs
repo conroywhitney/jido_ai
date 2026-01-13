@@ -17,22 +17,22 @@ defmodule JidoTest.AI.Model.FromTest do
       assert_reqllm_model(result)
     end
 
-    test "passes through ReqLLM.Model with all fields preserved" do
-      original = %ReqLLM.Model{
+    test "passes through LLMDB.Model with all fields preserved" do
+      original = LLMDB.Model.new!(%{
+        id: "claude-3-5-sonnet",
         provider: :anthropic,
         model: "claude-3-5-sonnet",
-        max_tokens: 4096,
-        capabilities: %{tool_call: true, vision: true},
+        limits: %{output: 4096},
+        capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
         modalities: %{input: [:text, :image], output: [:text]},
         cost: %{input: 3.0, output: 15.0}
-      }
+      })
 
       {:ok, result} = Model.from(original)
 
       assert result.provider == :anthropic
-      assert result.model == "claude-3-5-sonnet"
-      assert result.max_tokens == 4096
-      assert result.capabilities == %{tool_call: true, vision: true}
+      assert result.id == "claude-3-5-sonnet"
+      assert result.limits.output == 4096
     end
   end
 

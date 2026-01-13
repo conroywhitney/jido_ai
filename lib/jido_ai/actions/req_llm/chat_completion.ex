@@ -96,6 +96,14 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
         type: :boolean,
         default: false,
         doc: "Enable verbose logging"
+      ],
+      reasoning_effort: [
+        type: {:in, [:low, :medium, :high]},
+        doc: "Enable extended thinking with effort level (:low=1K, :medium=2K, :high=4K tokens)"
+      ],
+      thinking: [
+        type: :map,
+        doc: "Direct thinking config (e.g., %{type: \"enabled\", budget_tokens: 4096})"
       ]
     ]
 
@@ -154,7 +162,9 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
         frequency_penalty: nil,
         presence_penalty: nil,
         json_mode: false,
-        verbose: false
+        verbose: false,
+        reasoning_effort: nil,
+        thinking: nil
       }
       # Apply prompt options over defaults
       |> Map.merge(prompt_opts)
@@ -171,7 +181,9 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
           :frequency_penalty,
           :presence_penalty,
           :json_mode,
-          :verbose
+          :verbose,
+          :reasoning_effort,
+          :thinking
         ])
       )
       # Always keep required params
@@ -205,7 +217,7 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
     end
   end
 
-  defp validate_model(%ReqLLM.Model{} = model), do: {:ok, model}
+  defp validate_model(%LLMDB.Model{} = model), do: {:ok, model}
   defp validate_model(%Model{} = model), do: Model.from(model)
   defp validate_model(spec) when is_tuple(spec), do: Model.from(spec)
 
@@ -234,19 +246,25 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
       |> add_opt_if_present(:stop, params.stop)
       |> add_opt_if_present(:frequency_penalty, params.frequency_penalty)
       |> add_opt_if_present(:presence_penalty, params.presence_penalty)
+      # Extended thinking options - ReqLLM handles translation
+      |> add_opt_if_present(:reasoning_effort, params[:reasoning_effort])
+      |> add_opt_if_present(:thinking, params[:thinking])
 
     # Add tools if provided
     opts_with_tools =
       case params[:tools] do
         tools when is_list(tools) and length(tools) > 0 ->
-          # Convert tools directly to ReqLLM format
+          # Convert Jido.Action modules to ReqLLM.Tool structs
           tool_specs =
             Enum.map(tools, fn tool ->
-              %{
-                name: tool.name,
-                description: Map.get(tool, :description, ""),
-                parameters: Map.get(tool, :parameters, %{})
-              }
+              # Create a ReqLLM.Tool struct from the Jido action module
+              ReqLLM.Tool.new!(
+                name: tool.name(),
+                description: tool.description(),
+                parameter_schema: tool.schema(),
+                # Callback wraps the Jido action's run/2 function
+                callback: fn args -> tool.run(args, %{}) end
+              )
             end)
 
           Keyword.put(base_opts, :tools, tool_specs)
@@ -263,7 +281,7 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
   defp add_opt_if_present(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp call_reqllm(model, messages, req_options, params) do
-    # Build model spec string from ReqLLM.Model
+    # Build model spec string from LLMDB.Model
     model_spec = "#{model.provider}:#{model.model}"
 
     if params.stream do
@@ -274,13 +292,86 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
   end
 
   defp call_standard(model_id, messages, req_options) do
+    tools = Keyword.get(req_options, :tools, [])
+
     case ReqLLM.generate_text(model_id, messages, req_options) do
+      {:ok, %ReqLLM.Response{finish_reason: :tool_calls} = response} when tools != [] ->
+        # Model wants to call tools - use ReqLLM's built-in tool loop
+        handle_tool_loop(response, tools, model_id, req_options)
+
       {:ok, response} ->
-        # Use ReqLLM response directly
+        # No tool calls or no tools - format response directly
         format_response(response)
 
       {:error, error} ->
         {:error, error}
+    end
+  end
+
+  # Execute tools and continue conversation until we get a final text response
+  defp handle_tool_loop(response, tools, model_id, req_options, depth \\ 0) do
+    # Safety limit to prevent infinite loops
+    if depth > 10 do
+      {:error, "Tool loop exceeded maximum depth"}
+    else
+      # Get tool calls from response
+      tool_calls = ReqLLM.Response.tool_calls(response)
+
+      # Execute each tool and collect results
+      tool_results =
+        Enum.map(tool_calls, fn tool_call ->
+          # ToolCall has nested function field: %{name: "...", arguments: "json string"}
+          tool_name = tool_call.function.name
+          # Arguments is a JSON string - parse it
+          tool_args =
+            case Jason.decode(tool_call.function.arguments || "{}") do
+              {:ok, args} -> args
+              {:error, _} -> %{}
+            end
+
+          # Find matching tool by name
+          matching_tool = Enum.find(tools, fn t -> t.name == tool_name end)
+
+          result =
+            if matching_tool do
+              case ReqLLM.Tool.execute(matching_tool, tool_args) do
+                {:ok, result} -> Jason.encode!(result)
+                {:error, reason} -> "Error: #{inspect(reason)}"
+              end
+            else
+              "Error: Unknown tool #{tool_name}"
+            end
+
+          %{tool_use_id: tool_call.id, content: result}
+        end)
+
+      # Continue conversation with tool results using response context
+      # The context already includes the assistant message with tool_use
+      updated_context = response.context
+
+      # Add tool results as a user message with tool_result content blocks
+      tool_result_message = %{
+        role: :user,
+        content: Enum.map(tool_results, fn r ->
+          %{type: "tool_result", tool_use_id: r.tool_use_id, content: r.content}
+        end)
+      }
+
+      new_messages = ReqLLM.Context.to_list(updated_context) ++ [tool_result_message]
+
+      # Call again without tools in messages (context handles it)
+      case ReqLLM.generate_text(model_id, new_messages, req_options) do
+        {:ok, %ReqLLM.Response{finish_reason: :tool_calls} = new_response} ->
+          # More tools requested - recurse
+          handle_tool_loop(new_response, tools, model_id, req_options, depth + 1)
+
+        {:ok, final_response} ->
+          # Got final text response
+          format_response(final_response)
+
+        {:error, error} ->
+          {:error, error}
+      end
     end
   end
 
@@ -315,9 +406,35 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
     {:ok, %{content: content, tool_results: []}}
   end
 
+  # Handle ReqLLM.Response struct - extract content from message
+  defp format_response(%ReqLLM.Response{} = response) do
+    content = extract_content_from_response(response)
+    {:ok, %{content: content, tool_results: []}}
+  end
+
   defp format_response(response) when is_map(response) do
     # Fallback for other response formats
     content = response[:content] || response["content"] || ""
     {:ok, %{content: content, tool_results: []}}
   end
+
+  # Extract text content from ReqLLM.Response message
+  defp extract_content_from_response(%ReqLLM.Response{message: message}) when not is_nil(message) do
+    case message do
+      %{content: content} when is_binary(content) -> content
+      %{content: blocks} when is_list(blocks) ->
+        # Handle content blocks (text, thinking, tool_use, etc.)
+        blocks
+        |> Enum.filter(fn
+          %{type: "text"} -> true
+          %{type: :text} -> true
+          _ -> false
+        end)
+        |> Enum.map(fn block -> Map.get(block, :text) || Map.get(block, "text") || "" end)
+        |> Enum.join("\n")
+      _ -> inspect(message)
+    end
+  end
+
+  defp extract_content_from_response(_), do: ""
 end

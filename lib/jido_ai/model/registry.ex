@@ -658,7 +658,7 @@ defmodule Jido.AI.Model.Registry do
     {registry_count, legacy_count} =
       Enum.reduce(models, {0, 0}, fn model, {reg_acc, leg_acc} ->
         case model do
-          %ReqLLM.Model{} -> {reg_acc + 1, leg_acc}
+          %LLMDB.Model{} -> {reg_acc + 1, leg_acc}
           _ -> {reg_acc, leg_acc + 1}
         end
       end)

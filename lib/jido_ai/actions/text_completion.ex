@@ -76,10 +76,10 @@ defmodule Jido.AI.Actions.TextCompletion do
   end
 
   @doc false
-  @spec build_reqllm_model(Model.t() | ReqLLM.Model.t(), map()) ::
+  @spec build_reqllm_model(Model.t() | LLMDB.Model.t(), map()) ::
           {:ok, tuple()} | {:error, term()}
-  defp build_reqllm_model(%ReqLLM.Model{} = model, params) do
-    # Already a ReqLLM.Model, build tuple directly
+  defp build_reqllm_model(%LLMDB.Model{} = model, params) do
+    # Already an LLMDB.Model, build tuple directly
     reqllm_tuple =
       {model.provider, model.model,
        [
@@ -91,17 +91,17 @@ defmodule Jido.AI.Actions.TextCompletion do
   end
 
   defp build_reqllm_model(%Model{} = model, params) do
-    # Convert Jido.AI.Model to ReqLLM.Model
+    # Convert Jido.AI.Model to LLMDB.Model
     case Jido.AI.Model.from(model) do
-      {:ok, reqllm_model} ->
-        build_reqllm_model(reqllm_model, params)
+      {:ok, llmdb_model} ->
+        build_reqllm_model(llmdb_model, params)
 
       {:error, reason} ->
-        {:error, "Failed to build ReqLLM model: #{inspect(reason)}"}
+        {:error, "Failed to build LLMDB model: #{inspect(reason)}"}
     end
   rescue
     error ->
-      {:error, "Failed to build ReqLLM model: #{inspect(error)}"}
+      {:error, "Failed to build LLMDB model: #{inspect(error)}"}
   end
 
   @doc false

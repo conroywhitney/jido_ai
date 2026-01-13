@@ -74,7 +74,8 @@ defmodule Jido.Ai.MixProject do
 
       # Clients
       {:req, "~> 0.5.8"},
-      {:req_llm, "~> 1.0.0-rc.5"},
+      # Local fork for extended thinking support
+      {:req_llm, path: "../req_llm"},
       {:openai_ex, "~> 0.9.0"},
 
       # Testing
