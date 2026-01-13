@@ -296,11 +296,13 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
 
     case ReqLLM.generate_text(model_id, messages, req_options) do
       {:ok, %ReqLLM.Response{finish_reason: :tool_calls} = response} when tools != [] ->
-        # Model wants to call tools - use ReqLLM's built-in tool loop
+        # Model wants to call tools - enter tool loop
+        Logger.debug("🚀 Starting Tool Loop - LLM returned tool_calls finish_reason")
         handle_tool_loop(response, tools, model_id, req_options)
 
       {:ok, response} ->
         # No tool calls or no tools - format response directly
+        Logger.debug("📝 Direct response (no tools) - finish_reason: #{inspect(response.finish_reason)}")
         format_response(response)
 
       {:error, error} ->
@@ -316,6 +318,14 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
     else
       # Get tool calls from response
       tool_calls = ReqLLM.Response.tool_calls(response)
+
+      # Log what the LLM wants to do
+      Logger.debug("""
+      🔧 Tool Loop [depth=#{depth}] - LLM requesting #{length(tool_calls)} tool call(s):
+      #{Enum.map_join(tool_calls, "\n", fn tc ->
+        "   → #{tc.function.name}(#{tc.function.arguments})"
+      end)}
+      """)
 
       # Execute each tool and collect results as proper ReqLLM tool result messages
       # ReqLLM expects: %{role: :tool, tool_call_id: id, content: binary, name: tool_name}
@@ -347,6 +357,16 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
           %{role: :tool, tool_call_id: tool_call.id, content: result, name: tool_name}
         end)
 
+      # Log tool results we're sending back
+      Logger.debug("""
+      📤 Tool Loop [depth=#{depth}] - Sending #{length(tool_result_messages)} result(s) back:
+      #{Enum.map_join(tool_result_messages, "\n", fn msg ->
+        result_preview = String.slice(msg.content, 0, 200)
+        suffix = if String.length(msg.content) > 200, do: "...", else: ""
+        "   ← #{msg.name}: #{result_preview}#{suffix}"
+      end)}
+      """)
+
       # Continue conversation with tool results using response context
       # The context already includes the assistant message with tool_use
       updated_context = response.context
@@ -358,13 +378,16 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
       case ReqLLM.generate_text(model_id, new_messages, req_options) do
         {:ok, %ReqLLM.Response{finish_reason: :tool_calls} = new_response} ->
           # More tools requested - recurse
+          Logger.debug("🔄 Tool Loop [depth=#{depth}] - LLM wants more tools, continuing loop...")
           handle_tool_loop(new_response, tools, model_id, req_options, depth + 1)
 
         {:ok, final_response} ->
           # Got final text response
+          Logger.debug("✅ Tool Loop [depth=#{depth}] - LLM finished, returning text response")
           format_response(final_response)
 
         {:error, error} ->
+          Logger.debug("❌ Tool Loop [depth=#{depth}] - Error: #{inspect(error)}")
           {:error, error}
       end
     end
