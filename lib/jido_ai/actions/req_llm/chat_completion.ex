@@ -404,7 +404,8 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
   # Handle ReqLLM.Response struct - extract content from message
   defp format_response(%ReqLLM.Response{} = response) do
     content = extract_content_from_response(response)
-    {:ok, %{content: content, tool_results: []}}
+    thinking = ReqLLM.Response.thinking(response)
+    {:ok, %{content: content, tool_results: [], thinking: thinking}}
   end
 
   defp format_response(response) when is_map(response) do

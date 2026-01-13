@@ -147,11 +147,24 @@ defmodule Jido.AI.Actions.ReqLlm.ToolResponse do
       |> maybe_put(:thinking, params[:thinking])
 
     case ChatCompletion.run(completion_params, context) do
+      {:ok, %{content: content, tool_results: tool_results, thinking: thinking}} ->
+        if thinking do
+          Logger.debug("🧠 Extended Thinking:\n#{thinking}")
+        end
+
+        {:ok,
+         %{
+           result: content,
+           tool_results: tool_results,
+           thinking: thinking
+         }}
+
       {:ok, %{content: content, tool_results: tool_results}} ->
         {:ok,
          %{
            result: content,
-           tool_results: tool_results
+           tool_results: tool_results,
+           thinking: nil
          }}
 
       {:error, reason} ->
