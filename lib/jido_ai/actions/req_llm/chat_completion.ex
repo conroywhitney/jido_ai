@@ -317,8 +317,9 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
       # Get tool calls from response
       tool_calls = ReqLLM.Response.tool_calls(response)
 
-      # Execute each tool and collect results
-      tool_results =
+      # Execute each tool and collect results as proper ReqLLM tool result messages
+      # ReqLLM expects: %{role: :tool, tool_call_id: id, content: binary, name: tool_name}
+      tool_result_messages =
         Enum.map(tool_calls, fn tool_call ->
           # ToolCall has nested function field: %{name: "...", arguments: "json string"}
           tool_name = tool_call.function.name
@@ -342,22 +343,16 @@ defmodule Jido.AI.Actions.ReqLlm.ChatCompletion do
               "Error: Unknown tool #{tool_name}"
             end
 
-          %{tool_use_id: tool_call.id, content: result}
+          # Format as ReqLLM tool result message
+          %{role: :tool, tool_call_id: tool_call.id, content: result, name: tool_name}
         end)
 
       # Continue conversation with tool results using response context
       # The context already includes the assistant message with tool_use
       updated_context = response.context
 
-      # Add tool results as a user message with tool_result content blocks
-      tool_result_message = %{
-        role: :user,
-        content: Enum.map(tool_results, fn r ->
-          %{type: "tool_result", tool_use_id: r.tool_use_id, content: r.content}
-        end)
-      }
-
-      new_messages = ReqLLM.Context.to_list(updated_context) ++ [tool_result_message]
+      # Append each tool result as a separate message (ReqLLM format)
+      new_messages = ReqLLM.Context.to_list(updated_context) ++ tool_result_messages
 
       # Call again without tools in messages (context handles it)
       case ReqLLM.generate_text(model_id, new_messages, req_options) do
